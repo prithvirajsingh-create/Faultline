@@ -1,5 +1,6 @@
 
 const express = require("express");
+const UPSTREAM_TIMEOUT_MS = 2000;
 
 const app = express();
 const PORT = 3000;
@@ -55,9 +56,32 @@ app.use("/proxy", async (req, res) => {
             });
         }
 
-        const upstream = await fetch(upstreamUrl);
+        const controller = new AbortController();
 
-        const body = await upstream.text();
+        const timeout = setTimeout(() => {
+            controller.abort();
+        }, UPSTREAM_TIMEOUT_MS);
+
+        let upstream;
+        let body;
+
+        try {
+            upstream = await fetch(upstreamUrl, {
+                signal: controller.signal
+            });
+
+            body = await upstream.text();
+        } catch (error) {
+            if (error.name === "AbortError") {
+                return res.status(504).json({
+                    error: "Upstream request timed out"
+                });
+            }
+
+            throw error;
+        } finally {
+            clearTimeout(timeout);
+        }
 
         res.status(upstream.status);
 
@@ -81,9 +105,9 @@ app.use("/proxy", async (req, res) => {
 });
 
 if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Faultline running at http://localhost:${PORT}`);
-  });
+    app.listen(PORT, () => {
+        console.log(`Faultline running at http://localhost:${PORT}`);
+    });
 }
 
 module.exports = app;

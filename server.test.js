@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const app = require("./server");
 const http = require("node:http");
 
+
 async function startServer(server) {
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -142,5 +143,57 @@ test("injects the requested delay", async () => {
       elapsed >= 180,
       `Expected at least 180ms, received ${elapsed}ms`
     );
+  });
+});
+
+test("upstream timeout returns 504", async () => {
+  await withLocalUpstream(() => {}, async appUrl => {
+    const startedAt = Date.now();
+
+    const response = await fetch(`${appUrl}/proxy/get`);
+    const body = await response.json();
+
+    const elapsed = Date.now() - startedAt;
+
+    assert.equal(response.status, 504);
+    assert.deepEqual(body, {
+      error: "Upstream request timed out"
+    });
+    assert.ok(elapsed >= 1800);
+  });
+});
+
+test("a timed-out request does not block another request", async () => {
+  await withLocalUpstream((req, res) => {
+    if (req.url === "/hang") {
+      return;
+    }
+
+    res.writeHead(200, {
+      "content-type": "text/plain"
+    });
+    res.end("fast response");
+  }, async appUrl => {
+    const slowRequest = fetch(`${appUrl}/proxy/hang`);
+
+    const fastStartedAt = Date.now();
+    const fastResponse = await fetch(`${appUrl}/proxy/fast`);
+    const fastBody = await fastResponse.text();
+    const fastElapsed = Date.now() - fastStartedAt;
+
+    assert.equal(fastResponse.status, 200);
+    assert.equal(fastBody, "fast response");
+    assert.ok(
+      fastElapsed < 1000,
+      `Fast request took ${fastElapsed}ms`
+    );
+
+    const slowResponse = await slowRequest;
+    const slowBody = await slowResponse.json();
+
+    assert.equal(slowResponse.status, 504);
+    assert.deepEqual(slowBody, {
+      error: "Upstream request timed out"
+    });
   });
 });
