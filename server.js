@@ -13,7 +13,8 @@ app.use("/proxy", async (req, res) => {
     const start = Date.now();
     try {
         const path = req.originalUrl.slice("/proxy".length) || "/";
-        const upstreamUrl = new URL(path, UPSTREAM);
+        const upstreamBase = process.env.FAULTLINE_UPSTREAM || UPSTREAM;
+        const upstreamUrl = new URL(path, upstreamBase);
 
         const delay = Number(
             upstreamUrl.searchParams.get("faultDelayMs") || 0
