@@ -201,6 +201,9 @@ if (
     }
 
     const controller = new AbortController();
+    console.log("Upstream URL:", upstreamUrl.href);
+console.log("Timeout configured:", UPSTREAM_TIMEOUT_MS);
+console.log("Starting upstream fetch:", Date.now());
 
     const timeout = setTimeout(() => {
       controller.abort();
@@ -213,6 +216,7 @@ if (
       upstream = await fetch(upstreamUrl, {
         signal: controller.signal
       });
+      console.log("Upstream headers received:", upstream.status, Date.now());
 
       body = await upstream.text();
     } catch (error) {
